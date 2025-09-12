@@ -82,3 +82,36 @@ func DeleteTodo(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": true, "message": "Todo berhasil dihapus"})
 }
+func UploadTodoImage(c *gin.Context) {
+	var todo models.Todo
+	id := c.Param("id")
+
+	// 1. Cari dulu todo yang mau di-update
+	if err := config.DB.First(&todo, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan!"})
+		return
+	}
+
+	// 2. Ambil file dari request form-data
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Tidak ada file gambar yang diupload"})
+		return
+	}
+
+	// 3. Buat nama file yang unik untuk menghindari konflik
+	//    Contoh sederhana: "id-todo" + "ekstensi-file-asli" -> "1.png"
+	filename := id + filepath.Ext(file.Filename)
+	path := "public/uploads/" + filename
+
+	// 4. Simpan file ke path yang sudah ditentukan
+	if err := c.SaveUploadedFile(file, path); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file"})
+		return
+	}
+
+	// 5. Update kolom ImageURL di database
+	config.DB.Model(&todo).Update("ImageURL", path)
+
+	c.JSON(http.StatusOK, gin.H{"data": todo})
+}

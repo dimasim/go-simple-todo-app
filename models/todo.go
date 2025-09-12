@@ -9,4 +9,6 @@ type Todo struct {
 	Description string
 	IsDone      bool   `gorm:"default:false"`
 	ImageURL    string // Kolom untuk menyimpan URL gambar
+	UserID uint // ID dari user yang memiliki todo ini
+	User   User `gorm:"foreignKey:UserID"` // Relasi ke model User
 }
