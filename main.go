@@ -1,11 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
+	"github.com/dimasim/go-simple-todo-app/models"
+	"github.com/dimasim/go-simple-todo-app/config"
+	"github.com/dimasim/go-simple-todo-app/controllers"
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"github.com/dimasim/go-simple-todo-app/config"// <-- Ganti dengan path modul Anda
+
 )
 
 // init() akan berjalan sebelum fungsi main()
@@ -18,8 +21,21 @@ func init() {
 
 	// Menghubungkan ke database
 	config.ConnectDB()
+	config.DB.AutoMigrate(&models.Todo{}) 
+	log.Println("Database Migration successful!")
 }
 
 func main() {
-	fmt.Println("Aplikasi berjalan...")
+	r := gin.Default()
+
+	// Membuat grup rute untuk API
+	api := r.Group("/api")
+	{
+		api.GET("/todos", controllers.GetAllTodos)
+		api.POST("/todos", controllers.CreateTodo)
+		// Rute lain akan ditambahkan di sini nanti
+	}
+
+	// Menjalankan server di port 8080
+	r.Run(":8080")
 }
