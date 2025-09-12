@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/dimasim/go-simple-todo-app/models"
 	"github.com/dimasim/go-simple-todo-app/config"
@@ -33,9 +34,17 @@ func main() {
 	{
 		api.GET("/todos", controllers.GetAllTodos)
 		api.POST("/todos", controllers.CreateTodo)
-		// Rute lain akan ditambahkan di sini nanti
+		api.GET("/todos/:id", controllers.GetTodoByID)
+		api.PUT("/todos/:id", controllers.UpdateTodo)
+		api.DELETE("/todos/:id", controllers.DeleteTodo)	
+	}
+	
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
 
-	// Menjalankan server di port 8080
-	r.Run(":8080")
+	r.Run(":" + port)
+
+	// r.Run(":8080")
 }
