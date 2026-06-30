@@ -3,9 +3,7 @@ package controllers
 import (
 	"net/http"
 	"os"
-
 	"time"
-
 
 	"github.com/dimasim/go-simple-todo-app/config"
 	"github.com/dimasim/go-simple-todo-app/models"

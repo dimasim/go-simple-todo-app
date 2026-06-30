@@ -2,116 +2,145 @@ package controllers
 
 import (
 	"net/http"
+	"path/filepath"
 
 	"github.com/dimasim/go-simple-todo-app/config"
 	"github.com/dimasim/go-simple-todo-app/models"
 	"github.com/gin-gonic/gin"
-	"path/filepath"
 )
 
-// GetAllTodos mengambil semua data todo
+// GetAllTodos mengambil semua data todo milik user yang login
 func GetAllTodos(c *gin.Context) {
 	var todos []models.Todo
-	// Mengambil semua record dari tabel todos
-	config.DB.Find(&todos)
+	user, _ := c.Get("user")
 
+	config.DB.Where("user_id = ?", user.(models.User).ID).Find(&todos)
 	c.JSON(http.StatusOK, gin.H{"data": todos})
 }
 
-// CreateTodo membuat todo baru
+// CreateTodo membuat todo baru untuk user yang login
 func CreateTodo(c *gin.Context) {
 	var todo models.Todo
-
-	// Binding JSON request body ke struct Todo
 	if err := c.ShouldBindJSON(&todo); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Menyimpan data baru ke database
-	config.DB.Create(&todo)
+	user, _ := c.Get("user")
+	todo.UserID = user.(models.User).ID
+
+	if err := config.DB.Create(&todo).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan todo ke database"})
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": todo})
 }
+
+// GetTodoByID mengambil todo berdasarkan ID, khusus untuk milik user yang login
 func GetTodoByID(c *gin.Context) {
 	var todo models.Todo
-	id := c.Param("id") // Mengambil ID dari URL parameter
+	id := c.Param("id")
+	user, _ := c.Get("user")
 
-	// Mencari todo pertama yang cocok dengan ID
-	if err := config.DB.First(&todo, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan!"})
+	if err := config.DB.Where("id = ? AND user_id = ?", id, user.(models.User).ID).First(&todo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan atau Anda tidak memiliki akses"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": todo})
 }
+
+// UpdateTodo memperbarui todo milik user yang login
 func UpdateTodo(c *gin.Context) {
 	var todo models.Todo
 	id := c.Param("id")
+	user, _ := c.Get("user")
 
-	// 1. Cari dulu todo yang mau diupdate
-	if err := config.DB.First(&todo, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan!"})
+	// Pastikan todo milik user yang bersangkutan
+	if err := config.DB.Where("id = ? AND user_id = ?", id, user.(models.User).ID).First(&todo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan atau Anda tidak memiliki akses"})
 		return
 	}
 
-	// 2. Bind data JSON baru ke struct yang sudah ditemukan
-	var input models.Todo
+	var input struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		IsDone      *bool  `json:"is_done"`
+	}
+
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 3. Simpan perubahan ke database
-	config.DB.Model(&todo).Updates(input)
+	updates := make(map[string]interface{})
+	if input.Title != "" {
+		updates["title"] = input.Title
+	}
+	if input.Description != "" {
+		updates["description"] = input.Description
+	}
+	if input.IsDone != nil {
+		updates["is_done"] = *input.IsDone
+	}
+
+	if err := config.DB.Model(&todo).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal memperbarui todo"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"data": todo})
 }
-func DeleteTodo(c *gin.Context) {
-	var todo models.Todo
-	id := c.Param("id")
 
-	// Mencari todo yang akan dihapus
-	if err := config.DB.First(&todo, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan!"})
+// DeleteTodo menghapus todo milik user yang login
+func DeleteTodo(c *gin.Context) {
+	id := c.Param("id")
+	user, _ := c.Get("user")
+
+	var todo models.Todo
+	if err := config.DB.Where("id = ? AND user_id = ?", id, user.(models.User).ID).First(&todo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan atau Anda tidak memiliki akses"})
 		return
 	}
 
-	// Menghapus data dari database
-	config.DB.Delete(&todo)
+	if err := config.DB.Delete(&todo).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menghapus todo"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"data": true, "message": "Todo berhasil dihapus"})
 }
+
+// UploadTodoImage mengunggah gambar untuk todo milik user yang login
 func UploadTodoImage(c *gin.Context) {
 	var todo models.Todo
 	id := c.Param("id")
+	user, _ := c.Get("user")
 
-	// 1. Cari dulu todo yang mau di-update
-	if err := config.DB.First(&todo, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan!"})
+	if err := config.DB.Where("id = ? AND user_id = ?", id, user.(models.User).ID).First(&todo).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Todo tidak ditemukan atau Anda tidak memiliki akses"})
 		return
 	}
 
-	// 2. Ambil file dari request form-data
 	file, err := c.FormFile("image")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Tidak ada file gambar yang diupload"})
 		return
 	}
 
-	// 3. Buat nama file yang unik untuk menghindari konflik
-	//    Contoh sederhana: "id-todo" + "ekstensi-file-asli" -> "1.png"
 	filename := id + filepath.Ext(file.Filename)
 	path := "public/uploads/" + filename
 
-	// 4. Simpan file ke path yang sudah ditentukan
 	if err := c.SaveUploadedFile(file, path); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file"})
 		return
 	}
 
-	// 5. Update kolom ImageURL di database
-	config.DB.Model(&todo).Update("ImageURL", path)
+	if err := config.DB.Model(&todo).Update("ImageURL", path).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal memperbarui Image URL"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"data": todo})
 }
